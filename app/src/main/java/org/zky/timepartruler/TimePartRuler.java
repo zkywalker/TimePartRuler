@@ -21,7 +21,7 @@ import java.util.List;
  */
 
 public class TimePartRuler extends View {
-    private static final String TAG = "TimeScale3View";
+    private static final String TAG = "TimePartRuler";
 
     private int viewWidth;
     private int viewHeight;
@@ -36,8 +36,6 @@ public class TimePartRuler extends View {
 //    private int numHeight;
 
     private Paint linePaint = new Paint();
-    private Paint midPaint = new Paint();
-    private Paint textPaint = new Paint();
     private Paint bgPaint = new Paint();
     private Paint lockPaint = new Paint();
     private Paint centerTextPaint = new Paint();
@@ -75,15 +73,6 @@ public class TimePartRuler extends View {
         linePaint.setColor(Color.BLACK);
         linePaint.setTextAlign(Paint.Align.CENTER);
         linePaint.setTextSize(sp2px(6));
-
-        midPaint.setAntiAlias(true);
-        midPaint.setStrokeWidth(3);
-        midPaint.setColor(Color.RED);
-
-        textPaint.setAntiAlias(true);
-        textPaint.setColor(Color.WHITE);
-        textPaint.setTextAlign(Paint.Align.CENTER);
-        textPaint.setTextSize(sp2px(7));
 
         lockPaint.setAntiAlias(true);
         lockPaint.setColor(Color.WHITE);
