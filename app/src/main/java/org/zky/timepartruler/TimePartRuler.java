@@ -17,7 +17,7 @@ import java.util.List;
 
 /**
  * 时间尺控件
- * Created by kun on 2016/5/18.
+ * Created by kun on 2017/5/18.
  */
 
 public class TimePartRuler extends View {
