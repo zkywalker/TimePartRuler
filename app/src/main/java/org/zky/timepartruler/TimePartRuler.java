@@ -8,15 +8,23 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
-import android.widget.Scroller;
+import android.widget.OverScroller;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 时间尺控件
+ * 参考
+ * overScroller:
+ * http://www.jianshu.com/p/293d0c2f56cb
+ * scroller：
+ * http://blog.csdn.net/guolin_blog/article/details/48719871
+ * <p>
  * Created by kun on 2017/5/18.
  */
 
@@ -44,8 +52,11 @@ public class TimePartRuler extends View {
     private int timeScale = 1;
     //时间的长度 一天有24小时 也就是长度是 一小时长度*24
     private int totalTime = 1;
-    //滚动    http://blog.csdn.net/guolin_blog/article/details/48719871
-    private Scroller scroller;
+    //滚动
+    private OverScroller scroller;
+
+    //加速度
+    private VelocityTracker tracker;
 
     float lastX = 0;
     //选中的数据
@@ -59,6 +70,8 @@ public class TimePartRuler extends View {
     private String bgColor = "#20000000";
 
     private Bitmap lock;
+
+    private boolean mIsBeingDragged = false;
 
     //滚动监听
     private OnScrollListener scrollListener;
@@ -88,7 +101,8 @@ public class TimePartRuler extends View {
         rect = new Rect();
         rect2 = new Rect();
 
-        scroller = new Scroller(context);
+        scroller = new OverScroller(context);
+        tracker = VelocityTracker.obtain();
         lock = BitmapFactory.decodeResource(context.getResources(), R.drawable.ic_suoding);
         data = new ArrayList<>();
     }
@@ -160,7 +174,7 @@ public class TimePartRuler extends View {
             //画框框
             canvas.drawRect(rect, temp.bgPaint);
             //画图标
-            if (temp.isDrawIcon()){
+            if (temp.isDrawIcon()) {
 //            Rect mSrcRect = new Rect(0, 0, dp2px(10), dp2px(10));
 //            Rect mDestRect = new Rect(x2 - dp2px(12), rectHeight - dp2px(12), x2 - dp2px(2), rectHeight - dp2px(2));
                 //图片大小矩形
@@ -212,14 +226,21 @@ public class TimePartRuler extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         float x = event.getX();
+        tracker.addMovement(event);
+
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                mIsBeingDragged = true;
+
                 if (scroller != null && !scroller.isFinished()) {
                     scroller.abortAnimation();
                 }
                 lastX = x;
+
                 return true;
             case MotionEvent.ACTION_MOVE:
+                mIsBeingDragged = true;
+
                 float dataX = lastX - x;
                 int finalx = scroller.getFinalX();
                 //右边
@@ -233,35 +254,53 @@ public class TimePartRuler extends View {
                         return super.onTouchEvent(event);
                     }
                 }
-//                Log.d("--startScroll--","getFinalX "+scroller.getFinalX()+"getFinalY "+scroller.getFinalY());
                 scroller.startScroll(scroller.getFinalX(), scroller.getFinalY(), (int) dataX, 0);
                 lastX = x;
                 postInvalidate();
                 return true;
             case MotionEvent.ACTION_UP:
-                int finalx1 = scroller.getFinalX();
-                if (finalx1 < -viewWidth / 2) {
-                    scroller.setFinalX(-viewWidth / 2);
+//                int finalx1 = scroller.getFinalX();
+//                if (finalx1 < -viewWidth / 2) {
+//                    scroller.setFinalX(-viewWidth / 2);
+//
+//                }
+//                if (finalx1 > timeScale * 12 * 21) {
+//                    scroller.setFinalX(timeScale * 12 * 21);
+//                }
+
+                if (mIsBeingDragged) {
+                    //当手指立刻屏幕时，获得速度，作为fling的初始速度
+                    tracker.computeCurrentVelocity(1000, 10000);
+                    int initialVelocity = (int) tracker.getXVelocity();
+
+                    Log.i(TAG, "onTouchEvent: initialVelocity:" + initialVelocity);
+//                    if (Math.abs(initialVelocity) > 5) {
+                    // 由于坐标轴正方向问题，要加负号。
+                    //最终的 x y   x的加速度speed   y的加速度, x的最小值  x的最大值0
+                    scroller.fling(scroller.getFinalX(), scroller.getFinalY(), -initialVelocity, 0, 0, 10000, 0, 0);
+//                    }
+                    mIsBeingDragged = false;
+
+                    //TODO 加了惯性 这个时间现在不准
+                    if (scrollListener != null) {
+                        int finalX = scroller.getFinalX();
+                        //表示每一个屏幕刻度的一半的总秒数，每一个屏幕有6格
+                        int sec = 3 * 3600;
+                        //滚动的秒数
+                        int temsec = (int) Math.rint((double) finalX / (double) (timeScale * 12) * 3600);
+                        sec += temsec;
+                        //获取的时分秒
+                        int thour = sec / 3600;
+                        int tmin = (sec - thour * 3600) / 60;
+                        int tsec = sec - thour * 3600 - tmin * 60;
+                        scrollListener.onScrollFinish(thour, tmin, tsec);
+                    }
                 }
-                if (finalx1 > timeScale * 12 * 21) {
-                    scroller.setFinalX(timeScale * 12 * 21);
-                }
-                if (scrollListener != null) {
-                    int finalX = scroller.getFinalX();
-                    //表示每一个屏幕刻度的一半的总秒数，每一个屏幕有6格
-                    int sec = 3 * 3600;
-                    //滚动的秒数
-                    int temsec = (int) Math.rint((double) finalX / (double) (timeScale * 12) * 3600);
-                    sec += temsec;
-                    //获取的时分秒
-                    int thour = sec / 3600;
-                    int tmin = (sec - thour * 3600) / 60;
-                    int tsec = sec - thour * 3600 - tmin * 60;
-                    scrollListener.onScrollFinish(thour, tmin, tsec);
-                }
+
                 postInvalidate();
                 break;
         }
+
         return super.onTouchEvent(event);
     }
 
@@ -301,7 +340,8 @@ public class TimePartRuler extends View {
 
     /**
      * 提供滑动到时间点的功能
-     * @param time  滑到的时间
+     *
+     * @param time 滑到的时间
      */
     public void scrollTimeTo(int time) {
         if (0 < time && time < 24) {
