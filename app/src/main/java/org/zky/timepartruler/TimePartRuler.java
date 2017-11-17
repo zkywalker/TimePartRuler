@@ -12,6 +12,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.OverScroller;
 
 import java.util.ArrayList;
@@ -32,48 +33,93 @@ public class TimePartRuler extends View {
     private static final String TAG = "TimePartRuler";
 
     private int viewWidth;
+
     private int viewHeight;
 
-    //上面矩形高度 0.5 height
+    private int topRulerHeight;
+    /**
+     * 上面矩形高度 0.5 height
+     */
     private int rectHeight;
-    //尺子和矩形的间隔 dp
-    private int spaceHeight = dp2px(3);
-    //尺子的高度 0.4 height - space
-//    private int rulerHeight;
-    //刻度数字高度 0.1 height
-//    private int numHeight;
+    /**
+     * 尺子和矩形的间隔 dp
+     */
+    private int spaceHeight = dp2px(2);
 
     private Paint linePaint = new Paint();
+
     private Paint bgPaint = new Paint();
+
     private Paint lockPaint = new Paint();
+
     private Paint centerTextPaint = new Paint();
 
-    //最小刻度（5min）长度：一页显示 三小时 最小刻度为5分钟 也就是一页有36个刻度
+    private Paint centerTextPaint2 = new Paint();
+
+    private Paint midPaint = new Paint();
+
+    /**
+     * 最小刻度（5min）长度：一页显示 三小时 最小刻度为5分钟 也就是一页有36个刻度
+     */
     private int timeScale = 1;
-    //时间的长度 一天有24小时 也就是长度是 一小时长度*24
+    /**
+     * 时间的长度 一天有24小时 也就是长度是 一小时长度*24
+     */
     private int totalTime = 1;
-    //滚动
+    /**
+     * 滚动
+     */
     private OverScroller scroller;
 
-    //加速度
+    /**
+     * 加速度
+     */
     private VelocityTracker tracker;
 
-    float lastX = 0;
-    //选中的数据
+    private int mMaximumVelocity, mMinimumVelocity;
+
+    float mlastX = 0;
+    /**
+     * 缓存x
+     */
+    float downX = 0;
+    /**
+     * 选择的x
+     */
+    float chooseX = 0;
+    /**
+     * 选中的数据
+     */
     private List<TimePart> data;
-    //矩形
+    /**
+     * 矩形
+     */
     private Rect rect;
-    //矩形2
+    /**
+     * 矩形2
+     */
     private Rect rect2;
 
-    //背景颜色，可以修改
+    /**
+     * 背景颜色，可以修改
+     */
     private String bgColor = "#20000000";
 
     private Bitmap lock;
 
-    private boolean mIsBeingDragged = false;
+    /**
+     * 是否画红色竖线
+     */
+    private boolean isShowMidLine = true;
 
-    //滚动监听
+    /**
+     * 当前是否在操作刻度尺
+     */
+    private boolean isDraging = false;
+
+    /**
+     * 滚动监听
+     */
     private OnScrollListener scrollListener;
 
     public TimePartRuler(Context context) {
@@ -90,10 +136,19 @@ public class TimePartRuler extends View {
         lockPaint.setAntiAlias(true);
         lockPaint.setColor(Color.WHITE);
 
+        midPaint.setAntiAlias(true);
+        midPaint.setStrokeWidth(3);
+        midPaint.setColor(Color.RED);
+
         centerTextPaint.setAntiAlias(true);
         centerTextPaint.setColor(Color.WHITE);
         centerTextPaint.setTextAlign(Paint.Align.CENTER);
         centerTextPaint.setTextSize(sp2px(7));
+
+        centerTextPaint2.setAntiAlias(true);
+        centerTextPaint2.setColor(Color.WHITE);
+        centerTextPaint2.setTextAlign(Paint.Align.CENTER);
+        centerTextPaint2.setTextSize(sp2px(7));
 
         bgPaint.setAntiAlias(true);
         bgPaint.setColor(Color.parseColor(bgColor));
@@ -103,6 +158,10 @@ public class TimePartRuler extends View {
 
         scroller = new OverScroller(context);
         tracker = VelocityTracker.obtain();
+        mMaximumVelocity = ViewConfiguration.get(context)
+                .getScaledMaximumFlingVelocity();
+        mMinimumVelocity = ViewConfiguration.get(context)
+                .getScaledMinimumFlingVelocity();
         lock = BitmapFactory.decodeResource(context.getResources(), R.drawable.ic_suoding);
         data = new ArrayList<>();
     }
@@ -118,7 +177,7 @@ public class TimePartRuler extends View {
      * @param canvas 画布
      */
     public void drawBg(Canvas canvas) {
-        rect.set(-1, rectHeight + spaceHeight, timeScale * 12 * 24 + 1, (int) (viewHeight * 0.9));
+        rect.set(-1, topRulerHeight + rectHeight + spaceHeight, timeScale * 12 * 24 + 1, (int) (viewHeight * 0.9));
         canvas.drawRect(rect, bgPaint);
     }
 
@@ -129,7 +188,7 @@ public class TimePartRuler extends View {
      */
     public void drawLines(Canvas canvas) {
         //底部的线
-        canvas.drawLine(0, (float) (viewHeight * 0.9), totalTime, (float) (viewHeight * 0.9), linePaint);
+//        canvas.drawLine(0, (float) (viewHeight * 0.9), totalTime, (float) (viewHeight * 0.9), linePaint);
         for (int i = 0; i <= totalTime; i++) {
             int fiveMin = timeScale;
             //最小刻度五分钟来算  半小时刻度 正小时刻度
@@ -137,16 +196,16 @@ public class TimePartRuler extends View {
                 if (i % (fiveMin * 6) == 0) {
                     if (i % (fiveMin * 12) == 0) {
                         //整小时刻度
-                        canvas.drawLine(i, (float) (rectHeight + spaceHeight), i, (float) (viewHeight * 0.9), linePaint);
+                        canvas.drawLine(i, (float) (topRulerHeight + rectHeight + spaceHeight), i, (float) (viewHeight * 0.9), linePaint);
                         //画刻度值
                         canvas.drawText(formatString(i / (timeScale * 12), 0, 0), i, (float) (viewHeight * 0.97), linePaint);
                     } else {
-                        //否则画半小时刻度
-                        canvas.drawLine(i, (float) ((float) (rectHeight + spaceHeight) + viewHeight * 0.2), i, (float) (viewHeight * 0.9), linePaint);
+                        //否则画半小时刻度(上方的height+刻度尺的一半)
+                        canvas.drawLine(i, (float) ((float) (topRulerHeight + rectHeight + spaceHeight) + viewHeight * 0.10), i, (float) (viewHeight * 0.9), linePaint);
                     }
                 } else {
-                    //5分钟刻度的六倍就是半小时刻度 ，包括了整小时刻度
-                    canvas.drawLine(i, (float) ((float) (rectHeight + spaceHeight) + viewHeight * 0.2 + dp2px(6)), i, (float) (viewHeight * 0.9), linePaint);
+                    //5分钟刻度的六倍就是半小时刻度 ，包括了整小时刻度(上方的height+刻度尺的一半的一半)
+                    canvas.drawLine(i, (float) ((float) (topRulerHeight + rectHeight + spaceHeight) + viewHeight * 0.15), i, (float) (viewHeight * 0.9), linePaint);
                 }
             }
 
@@ -165,26 +224,44 @@ public class TimePartRuler extends View {
             // 如果是先除以3600小数点的数据会被舍去 位置就不准确了
             int x1 = temp.getStartSec() * timeScale / 300;
             int x2 = temp.getEndSec() * timeScale / 300;
-            rect.set(x1, 0, x2 - dp2px(1), rectHeight);
-            //如果是线框的形式
-            if (temp.isStroke) {
-                //因为线粗2dp，所以startX向右挪1dp，startY向下挪1dp，endX向左挪2dp，endY向左挪2dp
-                rect.set(x1 + dp2px(1), dp2px(1), x2 - dp2px(1), rectHeight - dp2px(2));
-            }
-            //画框框
-            canvas.drawRect(rect, temp.bgPaint);
-            //画图标
-            if (temp.isDrawIcon()) {
+            if (temp.type == TimePart.TYPE_RECT) {
+                rect.set(x1, topRulerHeight, x2 - dp2px(1), topRulerHeight + rectHeight);
+                //如果是线框的形式
+                if (temp.isStroke) {
+                    //因为线粗2dp，所以startX向右挪1dp，startY向下挪1dp，endX向左挪2dp，endY向左挪2dp
+                    rect.set(x1 + dp2px(1), topRulerHeight + dp2px(1), x2 - dp2px(1), topRulerHeight + rectHeight - dp2px(2));
+                }
+                //画框框
+                canvas.drawRect(rect, temp.bgPaint);
+                //画图标
+                if (temp.isDrawIcon()) {
 //            Rect mSrcRect = new Rect(0, 0, dp2px(10), dp2px(10));
 //            Rect mDestRect = new Rect(x2 - dp2px(12), rectHeight - dp2px(12), x2 - dp2px(2), rectHeight - dp2px(2));
-                //图片大小矩形
-                rect.set(0, 0, dp2px(10), dp2px(10));
-                //图片位置矩形
-                rect2.set(x2 - dp2px(12), rectHeight - dp2px(12), x2 - dp2px(2), rectHeight - dp2px(2));
-                canvas.drawBitmap(lock, rect, rect2, lockPaint);
+                    //图片大小矩形
+                    rect.set(0, 0, dp2px(10), dp2px(10));
+                    //图片位置矩形
+                    rect2.set(x2 - dp2px(12), topRulerHeight + rectHeight - dp2px(12), x2 - dp2px(2), topRulerHeight + rectHeight - dp2px(2));
+                    canvas.drawBitmap(lock, rect, rect2, lockPaint);
+                }
+                //画文字
+                canvas.drawText(temp.text, x1 + (x2 - x1) / 2, topRulerHeight + rectHeight / 2 + dp2px(7) / 2, centerTextPaint);
+            } else if (temp.type == TimePart.TYPE_TOP) {
+                //画左边竖线
+//                canvas.drawLine(x1,0,x1,topRulerHeight,linePaint);
+                //画右边竖线
+//                canvas.drawLine(x2,0,x2,topRulerHeight,linePaint);
+
+                rect.set(x1, 0, x2 - dp2px(1), topRulerHeight - spaceHeight);
+
+                //画框框
+                canvas.drawRect(rect, temp.bgPaint);
+
+                //画文字
+                centerTextPaint2.setColor(Color.parseColor("#4c98f6"));
+                canvas.drawText(temp.text, x1 + (x2 - x1) / 2, topRulerHeight / 2 + dp2px(7) / 2, centerTextPaint2);
+
             }
-            //画文字
-            canvas.drawText(temp.text, x1 + (x2 - x1) / 2, rectHeight / 2 + dp2px(7) / 2, centerTextPaint);
+
 
         }
 
@@ -219,97 +296,116 @@ public class TimePartRuler extends View {
 //        } else {
 //            builder.append(sec);
 //        }
-        //TODO 精确到分 秒不要了
+        // TODO 精确到分 秒不要了
         return builder.toString();
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        float x = event.getX();
+        float currentX = event.getX();
+        if (tracker == null) {
+            tracker = VelocityTracker.obtain();
+        }
         tracker.addMovement(event);
 
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                mIsBeingDragged = true;
 
-                if (scroller != null && !scroller.isFinished()) {
+                if (!scroller.isFinished()) {
                     scroller.abortAnimation();
                 }
-                lastX = x;
-
+                mlastX = currentX;
+                downX = currentX;
                 return true;
             case MotionEvent.ACTION_MOVE:
-                mIsBeingDragged = true;
+                isDraging = true;
 
-                float dataX = lastX - x;
-                int finalx = scroller.getFinalX();
-                //右边
-                if (dataX < 0) {
-                    if (finalx < -viewWidth / 2) {
-                        return super.onTouchEvent(event);
-                    }
-                }
-                if (dataX > 0) {
-                    if (finalx > timeScale * 12 * 21) {
-                        return super.onTouchEvent(event);
-                    }
-                }
-                scroller.startScroll(scroller.getFinalX(), scroller.getFinalY(), (int) dataX, 0);
-                lastX = x;
-                postInvalidate();
+                float moveX = mlastX - currentX;
+                mlastX = currentX;
+                scrollBy((int) (moveX), 0);
+
+//                postInvalidate();
                 return true;
             case MotionEvent.ACTION_UP:
-//                int finalx1 = scroller.getFinalX();
-//                if (finalx1 < -viewWidth / 2) {
-//                    scroller.setFinalX(-viewWidth / 2);
-//
-//                }
-//                if (finalx1 > timeScale * 12 * 21) {
-//                    scroller.setFinalX(timeScale * 12 * 21);
-//                }
+                isDraging = false;
 
-                if (mIsBeingDragged) {
-                    //当手指立刻屏幕时，获得速度，作为fling的初始速度
-                    tracker.computeCurrentVelocity(1000, 10000);
-                    int initialVelocity = (int) tracker.getXVelocity();
+                //当手势是点击的时候
+                if ((int) currentX / 10 == (int) downX / 10) {
 
-                    Log.i(TAG, "onTouchEvent: initialVelocity:" + initialVelocity);
-//                    if (Math.abs(initialVelocity) > 5) {
-                    // 由于坐标轴正方向问题，要加负号。
-                    //最终的 x y   x的加速度speed   y的加速度, x的最小值  x的最大值0
-                    scroller.fling(scroller.getFinalX(), scroller.getFinalY(), -initialVelocity, 0, 0, 10000, 0, 0);
-//                    }
-                    mIsBeingDragged = false;
+                    float totalX = getScrollX() + currentX;
+                    int totalMin = (int) (totalX / timeScale) * 5;
+                    int realH = totalMin / 60;
+                    int realM = totalMin - realH * 60;
 
-                    //TODO 加了惯性 这个时间现在不准
+                    chooseX = (int) (currentX / timeScale) * timeScale;
+
                     if (scrollListener != null) {
-                        int finalX = scroller.getFinalX();
-                        //表示每一个屏幕刻度的一半的总秒数，每一个屏幕有6格
-                        int sec = 3 * 3600;
-                        //滚动的秒数
-                        int temsec = (int) Math.rint((double) finalX / (double) (timeScale * 12) * 3600);
-                        sec += temsec;
-                        //获取的时分秒
-                        int thour = sec / 3600;
-                        int tmin = (sec - thour * 3600) / 60;
-                        int tsec = sec - thour * 3600 - tmin * 60;
-                        scrollListener.onScrollFinish(thour, tmin, tsec);
+                        scrollListener.onChoose(realH, realM);
                     }
+
+                }
+                //当手指立刻屏幕时，获得速度，作为fling的初始速度
+                tracker.computeCurrentVelocity(1000, mMaximumVelocity);
+                int initialVelocity = (int) tracker.getXVelocity();
+                if (Math.abs(initialVelocity) > mMinimumVelocity) {
+
+                    fling(-initialVelocity);
+
+                }
+
+                //VelocityTracker回收
+                if (tracker != null) {
+                    tracker.recycle();
+                    tracker = null;
                 }
 
                 postInvalidate();
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                isDraging = false;
+                if (!scroller.isFinished()) {
+                    scroller.abortAnimation();
+                }
+                //VelocityTracker回收
+                if (tracker != null) {
+                    tracker.recycle();
+                    tracker = null;
+                }
+                break;
+            default:
                 break;
         }
 
         return super.onTouchEvent(event);
     }
 
+    /**
+     * 带滑行的滑动，左边滑到 - 1各半小时(中间)，右边同理
+     *
+     * @param i 加速度
+     */
+    private void fling(int i) {
+        scroller.fling(getScrollX(), 0, i, 0, -(timeScale * 6 * 3), totalTime - (timeScale * 6 * 3), 0, 30);
+        invalidate();
+    }
+
     @Override
     public void computeScroll() {
-        super.computeScroll();
         if (scroller.computeScrollOffset()) {
             scrollTo(scroller.getCurrX(), scroller.getCurrY());
             invalidate();
+        }
+
+    }
+
+    @Override
+    public void scrollTo(int x, int y) {
+        super.scrollTo(x, y);
+        //当在拖动或者滑行的时候的时候才调用这个回调，要不然会和绑定联动的seekbar有冲突
+        if ((!scroller.isFinished() || isDraging) && scrollListener != null) {
+            int m = x / (timeScale / 5);
+            int h = m / 60;
+            scrollListener.onScroll(h, m % 60, 0);
         }
     }
 
@@ -325,16 +421,33 @@ public class TimePartRuler extends View {
 
         rectHeight = (int) (viewHeight * 0.5);
 
+        topRulerHeight = (int) (viewHeight * 0.2);
 
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        drawBg(canvas);
+//        drawBg(canvas);
         //选中的时间
         drawTimeRect(canvas);
         drawLines(canvas);
+        drawMidLine(canvas);
+    }
+
+    /**
+     * 画指针
+     *
+     * @param canvas 画布
+     */
+    private void drawMidLine(Canvas canvas) {
+        //画指针
+        if (isShowMidLine) {
+            canvas.drawLine(chooseX + scroller.getFinalX(), 0,
+                    chooseX + scroller.getFinalX(), viewHeight, midPaint);
+        }
+
+
     }
 
 
@@ -350,11 +463,49 @@ public class TimePartRuler extends View {
         }
     }
 
-    //滚动监听类
-    public interface OnScrollListener {
-        public void onScroll(int hour, int min, int sec);
+    /**
+     * 滑动到时间
+     *
+     * @param time 带小数的小时
+     */
+    public void scrollTimeTo(float time) {
+        if (scroller.isFinished() && !isDraging) {
+            scrollTo((int) (timeScale * 12 * time), 0);
+            postInvalidate();
+        }
 
-        public void onScrollFinish(int hour, int min, int sec);
+    }
+
+    public boolean isShowMidLine() {
+        return isShowMidLine;
+    }
+
+    public void setShowMidLine(boolean showMidLine) {
+        isShowMidLine = showMidLine;
+    }
+
+    /**
+     * 当尺子滑动的时候 seekbar是不能动的
+     *
+     * @return 是否可以动
+     */
+    public boolean canSeekBarCall() {
+        if (!scroller.isFinished() || isDraging) {
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
+     * 滚动监听类
+     */
+    public interface OnScrollListener {
+        void onScroll(int hour, int min, int sec);
+
+        void onScrollFinish(int hour, int min, int sec);
+
+        void onChoose(int hour, int min);
     }
 
     public OnScrollListener getScrollListener() {
@@ -365,7 +516,11 @@ public class TimePartRuler extends View {
         this.scrollListener = scrollListener;
     }
 
-    //添加时间片段到容器中
+    /**
+     * 添加时间片段到容器中
+     *
+     * @param temp
+     */
     public void addTimePart(List<TimePart> temp) {
         if (temp != null) {
             data.addAll(temp);
@@ -373,26 +528,45 @@ public class TimePartRuler extends View {
         }
     }
 
-    //清除所有的时间片段数据
+    /**
+     * 清除所有的时间片段数据
+     */
     public void clearData() {
         data.clear();
         postInvalidate();
     }
 
-    //时间片段 用于标记选中的时间
+    /**
+     * 时间片段 用于标记选中的时间
+     */
     public static class TimePart {
-        //开始的时间
+        public static int TYPE_RECT = 0;
+
+        public static int TYPE_TOP = 1;
+
+        public int type = 0;
+        /**
+         * 开始的时间
+         */
         public int sHour, sMinute, sSeconds;
-        //结束的时间
+        /**
+         * 结束的时间
+         */
         public int eHour, eMinute, eSeconds;
 
-        //用来画背景的画笔
+        /**
+         * 用来画背景的画笔
+         */
         private Paint bgPaint;
 
-        //是否允许画右下角的小锁图标
+        /**
+         * 是否允许画右下角的小锁图标
+         */
         private boolean isDrawIcon = false;
 
-        //区块中间的文字
+        /**
+         * 区块中间的文字
+         */
         private String text = "";
 
         //TODO
@@ -405,6 +579,11 @@ public class TimePartRuler extends View {
 
         public TimePart(int sHour, int sMinute, int sSeconds, int eHour, int eMinute, int eSeconds, String color) {
             this(sHour, sMinute, sSeconds, eHour, eMinute, eSeconds, color, "休息", false);
+        }
+
+        public TimePart(int sHour, int sMinute, int sSeconds, int eHour, int eMinute, int eSeconds, String color, String text, int type) {
+            this(sHour, sMinute, sSeconds, eHour, eMinute, eSeconds, color, text, false);
+            this.type = type;
         }
 
         public TimePart(int sHour, int sMinute, int sSeconds, int eHour, int eMinute, int eSeconds, String color, String text, boolean isDrawIcon) {
@@ -431,6 +610,40 @@ public class TimePartRuler extends View {
                 this.bgPaint.setStyle(Paint.Style.STROKE);
                 this.bgPaint.setStrokeWidth((int) (2 * scale + 0.5f));
             }
+
+        }
+
+        /**
+         * 起始时间
+         *
+         * @param sHour      起始时间
+         * @param sMinute    起始时间
+         * @param sSeconds   起始时间
+         * @param lenMin     间隔长度
+         * @param color      框的颜色
+         * @param text       中间文字
+         * @param isDrawIcon 画不画图案
+         * @param isStroke
+         * @param context
+         */
+        public TimePart(int sHour, int sMinute, int sSeconds, int lenMin, String color, String text, boolean isDrawIcon, boolean isStroke, Context context) {
+            this(sHour, sMinute, sSeconds, 0, 0, 0, color, text, isDrawIcon, isStroke, context);
+            this.isStroke = isStroke;
+
+            //当大于一个小时时进位
+            if (sMinute + lenMin > 60) {
+                //不允许超过当天
+                if (sHour + 1 > 24) {
+                    eHour = 24;
+                } else {
+                    eHour = sHour + 1;
+                }
+                eMinute = sMinute + lenMin - 60;
+            } else {
+                eHour = sHour;
+                eMinute = sMinute + lenMin;
+            }
+
 
         }
 
@@ -467,6 +680,21 @@ public class TimePartRuler extends View {
             isDrawIcon = drawIcon;
         }
 
+        @Override
+        public String toString() {
+            return "TimePart{" +
+                    "sHour=" + sHour +
+                    ", sMinute=" + sMinute +
+                    ", sSeconds=" + sSeconds +
+                    ", eHour=" + eHour +
+                    ", eMinute=" + eMinute +
+                    ", eSeconds=" + eSeconds +
+                    ", bgPaint=" + bgPaint +
+                    ", isDrawIcon=" + isDrawIcon +
+                    ", text='" + text + '\'' +
+                    ", isStroke=" + isStroke +
+                    '}';
+        }
     }
 
     private int dp2px(float dp) {

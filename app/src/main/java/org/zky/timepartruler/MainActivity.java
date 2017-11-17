@@ -20,12 +20,32 @@ public class MainActivity extends AppCompatActivity {
 
         tv_main1 = (TimePartRuler) findViewById(R.id.tv_main1);
 
+        tv_main1.setShowMidLine(false);
+        tv_main1.setScrollListener(new TimePartRuler.OnScrollListener() {
+            @Override
+            public void onScroll(int hour, int min, int sec) {
+
+            }
+
+            @Override
+            public void onScrollFinish(int hour, int min, int sec) {
+                Log.i("onScrollFinish", hour + " " + min);
+
+            }
+
+            @Override
+            public void onChoose(final int hour, final int min) {
+
+            }
+        });
+
         List<TimePartRuler.TimePart> t=new ArrayList<>();
         t.add(new TimePartRuler.TimePart(7,0,0,7,30,0,"#dddddd","休息",true));
         t.add(new TimePartRuler.TimePart(7,30,0,8,0,0,"#7195bc","已锁定",true));
         t.add(new TimePartRuler.TimePart(8,0,0,8,30,0,"#f6b032","已预约",false));
         t.add(new TimePartRuler.TimePart(8,30,0,11,0,0,"#cfe7bd","",false));
         t.add(new TimePartRuler.TimePart(8,30,0,9,30,0,"#ff0000","推荐时间",false,true,this));
+        t.add(new TimePartRuler.TimePart(8, 30, 0, 9, 30, 0, "#e5e5e5", "上部分色块", 1));
         tv_main1.addTimePart(t);
         new Handler().postDelayed(new Runnable() {
             @Override
